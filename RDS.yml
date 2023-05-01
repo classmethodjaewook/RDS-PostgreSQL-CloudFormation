@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description:
+  Create RDS
+# ------------------------------------------------------------#
+# Input Parameters
+# ------------------------------------------------------------# 
+Parameters:
+  SystemName:
+    Description: "System name of each resource names."
+    Type: String
+    Default: "test"
+  EnvName:
+    Description: "Environment name of each resource names."
+    Type: String
+    Default: "prd"
+  DBInstanceClass:
+    Description: DBInstanceType
+    Default: "db.m6g.xlarge"
+    Type: String
+  RDSDbMasterUserName:
+    Description: RDS DB Master User Name.
+    Default: "testsys"
+    Type: String
+  RDSDbMasterPassword:
+    Description: RDS DB Master Password.
+    Type: String
+    NoEcho: true
+  MaintenanceWindow:
+    Description: Enter MaintenanceWindow(UTC)
+    Type: String
+    Default: "sat:16:00-sat:17:00" # JST：[日] 01:00 - 02:00
+# ------------------------------------------------------------#
+#  Create RDS
+# ------------------------------------------------------------#
+Resources:
+  RDSDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBInstanceIdentifier: !Sub ${SystemName}-${EnvName}-rds
+      DBName: "testsys" # 最初のデータベース名
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: postgres
+      MultiAZ: false #　本番環境はMultiAZをTrueに設定
+      EngineVersion: 14.6
+      Port: 5433
+      AutoMinorVersionUpgrade: false
+      PubliclyAccessible: false
+      DeletionProtection: true
+      AvailabilityZone: # AvailabilityZone設定
+        Fn::Select: 
+        - 0
+        - Fn::GetAZs: ""
+      StorageType: "gp3"
+      AllocatedStorage: "500"
+      StorageEncrypted: true
+      EnablePerformanceInsights: true # Performance Insight
+      PerformanceInsightsRetentionPeriod: 7 # Performance Insight(保存期間7日)
+      BackupRetentionPeriod: 0 # 自動バックアップ無効
+      MasterUsername: !Ref RDSDbMasterUserName
+      MasterUserPassword: !Ref RDSDbMasterPassword
+      PreferredMaintenanceWindow: !Ref MaintenanceWindow # メンテナンスウィンドウ
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Sub ${EnvName}-rds-sg
+      DBSubnetGroupName: !Ref SubnetGroup
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      OptionGroupName: !Ref OptionGroup
+      Tags:
+          - Key: Name
+            Value: !Sub ${SystemName}-${EnvName}-rds
+          - Key: Env
+            Value: !Sub ${EnvName}
+          - Key: CmBillingGroup
+            Value: !Sub ${EnvName}-rds
+          - Key: Backup
+            Value: !Sub ${EnvName}-rds
+# ------------------------------------------------------------#
+#  Create SubnetGroup
+# ------------------------------------------------------------#
+  SubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub ${SystemName}-${EnvName}-rds-dbsub Subnet Group
+      DBSubnetGroupName: !Sub ${SystemName}-${EnvName}-rds-dbsub
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${EnvName}-datastore-subnet-1a
+        - Fn::ImportValue: !Sub ${EnvName}-datastore-subnet-1c
+      Tags:
+        - Key: Name
+          Value: !Sub ${SystemName}-${EnvName}-rds-dbsub
+        - Key: Env
+          Value: !Sub ${EnvName}
+# ------------------------------------------------------------#
+#  Create ParameterGroup
+# ------------------------------------------------------------#
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBParameterGroupName: !Sub ${SystemName}-${EnvName}-rds-dbpg
+      Description: !Sub ${SystemName}-${EnvName}-rds-dbpg Parameter
+      Family: 'postgres14'
+      Parameters:
+        timezone : Asia/Tokyo
+        client_encoding: UTF8
+      Tags:
+        - Key: Name
+          Value: !Sub ${SystemName}-${EnvName}-rds-dbpg
+        - Key: Env
+          Value: !Sub ${EnvName}
+# ------------------------------------------------------------#
+#  Create  OptionGroup
+# ------------------------------------------------------------#
+  OptionGroup:
+    Type: "AWS::RDS::OptionGroup"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      EngineName: "postgres"
+      MajorEngineVersion: "14"
+      OptionGroupDescription: !Sub ${SystemName}-${EnvName}-rds-dbog Option Group
+      OptionGroupName: !Sub ${SystemName}-${EnvName}-rds-dbog
+      Tags:
+        - Key: Name
+          Value: !Sub ${SystemName}-${EnvName}-rds-dbog
+        - Key: Env
+          Value: !Sub ${EnvName}
